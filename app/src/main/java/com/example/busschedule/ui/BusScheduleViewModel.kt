@@ -17,41 +17,49 @@ package com.example.busschedule.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.busschedule.ScheduleApplication
 import com.example.busschedule.data.BusSchedule
+import com.example.busschedule.data.ScheduleRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
-class BusScheduleViewModel: ViewModel() {
+class BusScheduleViewModel(scheduleRepository: ScheduleRepository): ViewModel() {
 
-    // Get example bus schedule
-    fun getFullSchedule(): Flow<List<BusSchedule>> = flowOf(
-        listOf(
-            BusSchedule(
-                1,
-                "Example Street",
-                0
-            )
+    val uiState: StateFlow<BusScheduleState> = scheduleRepository.getAllScheduleStream()
+        .map { BusScheduleState(it) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(stopTimeoutMillis = TIMEOUT_MILLIS),
+            initialValue = BusScheduleState()
         )
-    )
 
     // Get example bus schedule by stop
-    fun getScheduleFor(stopName: String): Flow<List<BusSchedule>> = flowOf(
-        listOf(
-            BusSchedule(
-                1,
-                "Example Street",
-                0
-            )
-        )
-    )
+    fun getScheduleFor(stopName: String): Flow<List<BusSchedule>> {
+        return uiState.map { state ->
+            state.schedules.filter { it.stopName == stopName }
+        }
+    }
 
     companion object {
+        private const val TIMEOUT_MILLIS = 5_000L
+
         val factory : ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                BusScheduleViewModel()
+                val scheduleApplication: ScheduleApplication = (this[APPLICATION_KEY] as ScheduleApplication)
+                BusScheduleViewModel(
+                    scheduleApplication.appContainer.scheduleRepository
+                )
             }
         }
     }
 }
+
+data class BusScheduleState(val schedules: List<BusSchedule> = listOf())
